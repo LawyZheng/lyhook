@@ -8,9 +8,21 @@ import (
 	"log"
 	"reflect"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/sirupsen/logrus"
+)
+
+var (
+	minimumCallerDepth int
+	lyhookPackage      string
+	callerInitOnce     sync.Once
+)
+
+const (
+	maximumCallerDepth int = 30
+	knownLogrusFrames  int = 11
 )
 
 type CtxKey string
@@ -188,9 +200,13 @@ func (hook *LyHook) ioWrite(entry *logrus.Entry) error {
 	}
 
 	if level := entry.Level; level <= logrus.ErrorLevel {
-		pc, _, line, _ := runtime.Caller(8)
-		entry.Data["func"] = runtime.FuncForPC(pc).Name()
-		entry.Data["line"] = line
+		// pc, _, line, _ := runtime.Caller(8)
+		// entry.Data["func"] = runtime.FuncForPC(pc).Name()
+		// entry.Data["line"] = line
+		if caller := getCaller(); caller != nil {
+			entry.Data["func"] = caller.Function
+			entry.Data["line"] = caller.Line
+		}
 	}
 
 	// use our formatter instead of entry.String()
@@ -207,4 +223,61 @@ func (hook *LyHook) ioWrite(entry *logrus.Entry) error {
 // Levels returns configured log levels.
 func (hook *LyHook) Levels() []logrus.Level {
 	return logrus.AllLevels
+}
+
+// getPackageName reduces a fully qualified function name to the package name
+// There really ought to be to be a better way...
+func getPackageName(f string) string {
+	for {
+		lastPeriod := strings.LastIndex(f, ".")
+		lastSlash := strings.LastIndex(f, "/")
+		if lastPeriod > lastSlash {
+			f = f[:lastPeriod]
+		} else {
+			break
+		}
+	}
+
+	return f
+}
+
+// getCaller retrieves the name of the first non-logrus calling function
+func getCaller() *runtime.Frame {
+	// cache this package's fully-qualified name
+	callerInitOnce.Do(func() {
+		pcs := make([]uintptr, maximumCallerDepth)
+		_ = runtime.Callers(0, pcs)
+
+		// dynamic get the package name and the minimum caller depth
+		for i := 0; i < maximumCallerDepth; i++ {
+			funcName := runtime.FuncForPC(pcs[i]).Name()
+			if strings.Contains(funcName, "getCaller") {
+				lyhookPackage = getPackageName(funcName)
+				break
+			}
+		}
+
+		minimumCallerDepth = knownLogrusFrames
+	})
+
+	// Restrict the lookback frames to avoid runaway lookups
+	pcs := make([]uintptr, maximumCallerDepth)
+	depth := runtime.Callers(minimumCallerDepth, pcs)
+	frames := runtime.CallersFrames(pcs[:depth])
+
+	for f, again := frames.Next(); again; f, again = frames.Next() {
+		pkg := getPackageName(f.Function)
+
+		// If the caller isn't part of this package, we're done
+		if pkg != lyhookPackage {
+			return &f //nolint:scopelint
+		}
+	}
+
+	// if we got here, we failed to find the caller's context
+	return nil
+}
+
+func init() {
+	minimumCallerDepth = 1
 }

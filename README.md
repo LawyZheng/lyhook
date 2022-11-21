@@ -7,7 +7,7 @@ Sometimes developers like to write directly to a file on the filesystem. This is
 ## Example
 ```go
 import (
-	"github.com/rifflock/lfshook"
+	"github.com/lawyzheng/lyhook"
 	"github.com/sirupsen/logrus"
 )
 

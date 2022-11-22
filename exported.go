@@ -45,6 +45,16 @@ func SetDefaultWriter(defaultWriter io.Writer) {
 	hook.SetDefaultWriter(defaultWriter)
 }
 
+func NewLoggerWithHook(h *LyHook) *logrus.Logger {
+	logger := logrus.New()
+	logger.SetReportCaller(logrus.StandardLogger().ReportCaller)
+	logger.SetFormatter(logrus.StandardLogger().Formatter)
+	logger.SetOutput(logrus.StandardLogger().Out)
+	logger.SetLevel(logrus.GetLevel())
+	h.Apply(logger)
+	return logger
+}
+
 func init() {
 	hook.Apply(logrus.StandardLogger())
 }

@@ -1,6 +1,6 @@
 # A Easy Hook for Logrus
 
-[![GoDoc](https://godoc.org/github.com/rifflock/lfshook?status.svg)](http://godoc.org/github.com/rifflock/lfshook)
+[![GoDoc](https://godoc.org/github.com/layzheng/lyhook?status.svg)](https://pkg.go.dev/github.com/lawyzheng/lyhook)
 
 Sometimes developers like to write directly to a file on the filesystem. This is a hook for [`logrus`](https://github.com/sirupsen/logrus) which designed to allow users to do that. The log levels are dynamic at instantiation of the hook, so it is capable of logging at some or all levels.
 
@@ -33,7 +33,7 @@ func main(){
 	}
 	lyhook.SetDefaultWriter(wr)
 
-	// this is trigger logrus and the hook
+	// this will trigger logrus and the hook
 	logrus.Info("this is a log")
 }
 ```

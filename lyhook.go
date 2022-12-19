@@ -19,10 +19,6 @@ const (
 	ctxKeyName CtxKey = "moduleName"
 )
 
-const (
-	DefaultCallerSkip = 8
-)
-
 // We are logging to file, strip colors to make the output more readable.
 var defaultFormatter = &logrus.TextFormatter{DisableColors: true}
 var devFormatter = &logrus.TextFormatter{ForceColors: true, FullTimestamp: true}
@@ -44,7 +40,7 @@ type LyHook struct {
 	logger        *logrus.Logger
 	loggerApplied bool
 	hookMap       map[string]*LyHook
-	callerSkip    *int
+	caller        Caller
 }
 
 // NewHook returns new LFS hook.
@@ -128,10 +124,10 @@ func (hook *LyHook) SetFormatter(formatter logrus.Formatter) *LyHook {
 
 // SetCallerSkip  sets the caller skip to log error func，
 // Default is 8, you can use `DefaultCallerSkip + i` to set your skip.
-func (hook *LyHook) SetCallerSkip(skip int) *LyHook {
+func (hook *LyHook) SetCaller(caller Caller) *LyHook {
 	hook.lock.Lock()
 	defer hook.lock.Unlock()
-	hook.callerSkip = &skip
+	hook.caller = caller
 	return hook
 }
 
@@ -205,14 +201,21 @@ func (hook *LyHook) ioWrite(entry *logrus.Entry) error {
 	}
 
 	if level := entry.Level; level <= logrus.ErrorLevel {
-		skip := DefaultCallerSkip
-		if hook.callerSkip != nil {
-			skip = *hook.callerSkip
+		var frame *runtime.Frame
+
+		if entry.Caller != nil {
+			frame = entry.Caller
+		} else if hook.caller != nil && !reflect.ValueOf(hook.caller).IsNil() {
+			frame = hook.caller.Frame()
+		} else {
+			frame = NewConstCaller(DefaultCallerSkip).Frame()
 		}
 
-		pc, _, line, _ := runtime.Caller(skip)
-		entry.Data["func"] = runtime.FuncForPC(pc).Name()
-		entry.Data["line"] = line
+		if frame != nil {
+			entry.Data["func"] = runtime.FuncForPC(frame.PC).Name()
+			entry.Data["line"] = frame.Line
+		}
+
 	}
 
 	// use our formatter instead of entry.String()

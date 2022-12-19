@@ -8,7 +8,8 @@ import (
 )
 
 var (
-	hook = NewLyHook(io.Discard, devFormatter)
+	hook = NewLyHook(io.Discard, devFormatter).
+		SetCaller(NewConstCaller(DefaultCallerSkip + 2))
 	lock = new(sync.Mutex)
 )
 
@@ -33,8 +34,8 @@ func Apply(logger *logrus.Logger) *LyHook {
 	return hook.Apply(logger)
 }
 
-func SetCallerSkip(skip int) *LyHook {
-	return hook.SetCallerSkip(skip)
+func SetCaller(caller Caller) *LyHook {
+	return hook.SetCaller(caller)
 }
 
 func SetFormatter(formatter logrus.Formatter) *LyHook {

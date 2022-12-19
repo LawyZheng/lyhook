@@ -19,6 +19,10 @@ const (
 	ctxKeyName CtxKey = "moduleName"
 )
 
+const (
+	DefaultCallerSkip = 8
+)
+
 // We are logging to file, strip colors to make the output more readable.
 var defaultFormatter = &logrus.TextFormatter{DisableColors: true}
 var devFormatter = &logrus.TextFormatter{ForceColors: true, FullTimestamp: true}
@@ -40,6 +44,7 @@ type LyHook struct {
 	logger        *logrus.Logger
 	loggerApplied bool
 	hookMap       map[string]*LyHook
+	callerSkip    *int
 }
 
 // NewHook returns new LFS hook.
@@ -74,16 +79,17 @@ func NewLyHook(output interface{}, formatter logrus.Formatter) *LyHook {
 	return hook
 }
 
-func (hook *LyHook) Apply(logger *logrus.Logger) {
+func (hook *LyHook) Apply(logger *logrus.Logger) *LyHook {
 	hook.lock.Lock()
 	defer hook.lock.Unlock()
 
 	logger.AddHook(hook)
 	hook.logger = logger
 	hook.loggerApplied = true
+	return hook
 }
 
-func (hook *LyHook) Add(module string, newhook *LyHook) *logrus.Entry {
+func (hook *LyHook) Add(module string, newhook *LyHook) logrus.FieldLogger {
 	var (
 		logger *logrus.Logger
 		ctx    = context.Background()
@@ -110,21 +116,32 @@ func (hook *LyHook) Add(module string, newhook *LyHook) *logrus.Entry {
 
 // SetFormatter sets the format that will be used by hook.
 // If using text formatter, this method will disable color output to make the log file more readable.
-func (hook *LyHook) SetFormatter(formatter logrus.Formatter) {
+func (hook *LyHook) SetFormatter(formatter logrus.Formatter) *LyHook {
 	hook.lock.Lock()
 	defer hook.lock.Unlock()
 	if formatter == nil {
 		formatter = defaultFormatter
 	}
 	hook.formatter = formatter
+	return hook
+}
+
+// SetCallerSkip  sets the caller skip to log error func，
+// Default is 8, you can use `DefaultCallerSkip + i` to set your skip.
+func (hook *LyHook) SetCallerSkip(skip int) *LyHook {
+	hook.lock.Lock()
+	defer hook.lock.Unlock()
+	hook.callerSkip = &skip
+	return hook
 }
 
 // SetDefaultWriter sets default writer for levels that don't have any defined writer.
-func (hook *LyHook) SetDefaultWriter(defaultWriter io.Writer) {
+func (hook *LyHook) SetDefaultWriter(defaultWriter io.Writer) *LyHook {
 	hook.lock.Lock()
 	defer hook.lock.Unlock()
 	hook.defaultWriter = defaultWriter
 	hook.hasDefaultWriter = true
+	return hook
 }
 
 func (hook *LyHook) GetFormatter() logrus.Formatter {
@@ -188,7 +205,12 @@ func (hook *LyHook) ioWrite(entry *logrus.Entry) error {
 	}
 
 	if level := entry.Level; level <= logrus.ErrorLevel {
-		pc, _, line, _ := runtime.Caller(8)
+		skip := DefaultCallerSkip
+		if hook.callerSkip != nil {
+			skip = *hook.callerSkip
+		}
+
+		pc, _, line, _ := runtime.Caller(skip)
 		entry.Data["func"] = runtime.FuncForPC(pc).Name()
 		entry.Data["line"] = line
 	}

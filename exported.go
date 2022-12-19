@@ -25,24 +25,28 @@ func PickFormatter(isdev bool) logrus.Formatter {
 	return defaultFormatter
 }
 
-func Add(module string, newhook *LyHook) *logrus.Entry {
+func Add(module string, newhook *LyHook) logrus.FieldLogger {
 	return hook.Add(module, newhook)
 }
 
-func Apply(logger *logrus.Logger) {
-	hook.Apply(logger)
+func Apply(logger *logrus.Logger) *LyHook {
+	return hook.Apply(logger)
 }
 
-func SetFormatter(formatter logrus.Formatter) {
-	hook.SetFormatter(formatter)
+func SetCallerSkip(skip int) *LyHook {
+	return hook.SetCallerSkip(skip)
+}
+
+func SetFormatter(formatter logrus.Formatter) *LyHook {
+	return hook.SetFormatter(formatter)
 }
 
 func GetFormatter() logrus.Formatter {
 	return hook.GetFormatter()
 }
 
-func SetDefaultWriter(defaultWriter io.Writer) {
-	hook.SetDefaultWriter(defaultWriter)
+func SetDefaultWriter(defaultWriter io.Writer) *LyHook {
+	return hook.SetDefaultWriter(defaultWriter)
 }
 
 func NewLoggerWithHook(h *LyHook) *logrus.Logger {

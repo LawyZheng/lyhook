@@ -62,11 +62,11 @@ func (c *DefaultCaller) Frame() *runtime.Frame {
 }
 
 func getFrame(skip int, fn IfCallFrame) *runtime.Frame {
-	pcs := make([]uintptr, maximumCallerDepth)
-	_ = runtime.Callers(0, pcs)
-
 	// dynamic get the package name
 	callerInitOnce.Do(func() {
+		pcs := make([]uintptr, maximumCallerDepth)
+		_ = runtime.Callers(0, pcs)
+
 		for i := 0; i < maximumCallerDepth; i++ {
 			name := runtime.FuncForPC(pcs[i]).Name()
 			if strings.Contains(name, "getFrame") {
@@ -77,15 +77,15 @@ func getFrame(skip int, fn IfCallFrame) *runtime.Frame {
 	})
 
 	// get skip depth
-	if fn != nil {
-		for i := 0; i < maximumCallerDepth; i++ {
-			name := runtime.FuncForPC(pcs[i]).Name()
-			if fn(name) {
-				skip = i
-				break
-			}
-		}
-	}
+	// if fn != nil {
+	// 	for i := 0; i < maximumCallerDepth; i++ {
+	// 		name := runtime.FuncForPC(pcs[i]).Name() // DO NOT USE: incorrect function name
+	// 		if fn(name) {
+	// 			skip = i
+	// 			break
+	// 		}
+	// 	}
+	// }
 
 	rpc := make([]uintptr, maximumCallerDepth)
 	n := runtime.Callers(skip, rpc[:])
@@ -95,9 +95,16 @@ func getFrame(skip int, fn IfCallFrame) *runtime.Frame {
 	frames := runtime.CallersFrames(rpc[:n])
 
 	for frame, next := frames.Next(); next; frame, next = frames.Next() {
-		if s := getPackageName(frame.Function); s != hookPackage {
+		if fn == nil {
+			fn = func(packageName string) bool {
+				return getPackageName(packageName) != hookPackage
+			}
+		}
+
+		if fn(frame.Function) {
 			return &frame
 		}
+
 	}
 	return nil
 

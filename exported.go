@@ -9,7 +9,7 @@ import (
 
 var (
 	hook = NewLyHook(io.Discard, devFormatter).
-		SetCaller(NewConstCaller(DefaultCallerSkip + 2))
+		SetCaller(NewDefaultCaller().SetSkip(DefaultCallerSkip + 2))
 	lock = new(sync.Mutex)
 )
 

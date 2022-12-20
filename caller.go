@@ -3,64 +3,118 @@ package lyhook
 import (
 	"runtime"
 	"strings"
+	"sync"
 )
 
 const (
 	maximumCallerDepth int = 25
 
-	DefaultCallerSkip = 8
+	DefaultCallerSkip = 10
 )
 
-type CallerFunc func() *runtime.Frame
+var (
+	defaultCaller = NewDefaultCaller().SetSkip(DefaultCallerSkip)
+
+	// qualified package name, cached at first use
+	hookPackage string
+
+	// Used for caller information initialisation
+	callerInitOnce sync.Once
+)
+
+type IfCallFrame func(packageName string) bool
 
 type Caller interface {
 	Frame() *runtime.Frame
 }
 
-func NewConstCaller(skip int) *ConstCaller {
-	return &ConstCaller{skip: skip}
-}
-
-type ConstCaller struct {
-	skip int
-}
-
-func (c *ConstCaller) Frame() *runtime.Frame {
-	rpc := make([]uintptr, 1)
-	n := runtime.Callers(c.skip+1, rpc[:])
-	if n < 1 {
-		return nil
+func NewDefaultCaller() *DefaultCaller {
+	return &DefaultCaller{
+		lock: new(sync.Mutex),
 	}
-	frame, _ := runtime.CallersFrames(rpc).Next()
-	return &frame
 }
 
-func NewFuncCaller(fn CallerFunc) *FuncCaller {
-	return &FuncCaller{fn: fn}
+type DefaultCaller struct {
+	skip        int
+	ifCallFrame IfCallFrame
+
+	lock *sync.Mutex
 }
 
-type FuncCaller struct {
-	fn CallerFunc
+func (c *DefaultCaller) SetSkip(skip int) *DefaultCaller {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.skip = skip
+	return c
 }
 
-func (c *FuncCaller) Frame() *runtime.Frame {
-	return c.fn()
+func (c *DefaultCaller) SetIfCall(fn IfCallFrame) *DefaultCaller {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.ifCallFrame = fn
+	return c
 }
 
-func WrappedCallerFuncWithPrefix(prefix string) CallerFunc {
-	return func() *runtime.Frame {
-		pcs := make([]uintptr, maximumCallerDepth)
-		_ = runtime.Callers(0, pcs)
+func (c *DefaultCaller) Frame() *runtime.Frame {
+	return getFrame(c.skip, c.ifCallFrame)
+}
 
-		// dynamic get the package name and the minimum caller depth
-		var skip int
+func getFrame(skip int, fn IfCallFrame) *runtime.Frame {
+	pcs := make([]uintptr, maximumCallerDepth)
+	_ = runtime.Callers(0, pcs)
+
+	// dynamic get the package name
+	callerInitOnce.Do(func() {
 		for i := 0; i < maximumCallerDepth; i++ {
 			name := runtime.FuncForPC(pcs[i]).Name()
-			if strings.HasPrefix(name, prefix) {
+			if strings.Contains(name, "getFrame") {
+				hookPackage = getPackageName(name)
+				break
+			}
+		}
+	})
+
+	// get skip depth
+	if fn != nil {
+		for i := 0; i < maximumCallerDepth; i++ {
+			name := runtime.FuncForPC(pcs[i]).Name()
+			if fn(name) {
 				skip = i
 				break
 			}
 		}
-		return NewConstCaller(skip).Frame()
 	}
+
+	rpc := make([]uintptr, maximumCallerDepth)
+	n := runtime.Callers(skip, rpc[:])
+	if n < 1 {
+		return nil
+	}
+	frames := runtime.CallersFrames(rpc[:n])
+
+	for frame, next := frames.Next(); next; frame, next = frames.Next() {
+		if s := getPackageName(frame.Function); s != hookPackage {
+			return &frame
+		}
+	}
+	return nil
+
+}
+
+// getPackageName reduces a fully qualified function name to the package name
+// There really ought to be to be a better way...
+func getPackageName(f string) string {
+	for {
+		lastPeriod := strings.LastIndex(f, ".")
+		lastSlash := strings.LastIndex(f, "/")
+		if lastPeriod > lastSlash {
+			f = f[:lastPeriod]
+		} else {
+			break
+		}
+	}
+
+	return f
 }

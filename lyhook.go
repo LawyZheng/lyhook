@@ -203,16 +203,16 @@ func (hook *LyHook) ioWrite(entry *logrus.Entry) error {
 	if level := entry.Level; level <= logrus.ErrorLevel {
 		var frame *runtime.Frame
 
-		if entry.Caller != nil {
+		if entry.HasCaller() {
 			frame = entry.Caller
 		} else if hook.caller != nil && !reflect.ValueOf(hook.caller).IsNil() {
 			frame = hook.caller.Frame()
 		} else {
-			frame = NewConstCaller(DefaultCallerSkip).Frame()
+			frame = defaultCaller.Frame()
 		}
 
 		if frame != nil {
-			entry.Data["func"] = runtime.FuncForPC(frame.PC).Name()
+			entry.Data["func"] = frame.Function
 			entry.Data["line"] = frame.Line
 		}
 

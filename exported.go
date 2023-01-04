@@ -13,6 +13,13 @@ var (
 	lock = new(sync.Mutex)
 )
 
+type Logger interface {
+	logrus.FieldLogger
+
+	Trace(args ...interface{})
+	Tracef(format string, args ...interface{})
+}
+
 func SetHook(h *LyHook) {
 	lock.Lock()
 	defer lock.Unlock()
@@ -26,7 +33,7 @@ func PickFormatter(isdev bool) logrus.Formatter {
 	return defaultFormatter
 }
 
-func Add(module string, newhook *LyHook) logrus.FieldLogger {
+func Add(module string, newhook *LyHook) Logger {
 	return hook.Add(module, newhook)
 }
 

@@ -85,7 +85,7 @@ func (hook *LyHook) Apply(logger *logrus.Logger) *LyHook {
 	return hook
 }
 
-func (hook *LyHook) Add(module string, newhook *LyHook) logrus.FieldLogger {
+func (hook *LyHook) Add(module string, newhook *LyHook) Logger {
 	var (
 		logger *logrus.Logger
 		ctx    = context.Background()
